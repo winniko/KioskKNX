@@ -1,0 +1,25 @@
+# Strumenti di build locali (JDK, Android SDK, emulatore, ffmpeg)
+tools/
+.gradle/
+.kotlin/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+
+# Chiave di firma: MAI pubblicarla (serve per gli aggiornamenti dell'app)
+keystore/
+
+# APK compilati (si pubblicano nelle "Releases" di GitHub, non nel codice)
+APK_PRONTO/
+*.apk
+*.apkm
+
+# Note di lavoro locali (contengono percorsi del PC e indirizzi della rete privata)
+CLAUDE.md
+LISTA_COSE_DA_FARE.md
+
+# File di test generati (si ricreano con ffmpeg, vedi test/README_TEST.md)
+test/*.h264
+__pycache__/

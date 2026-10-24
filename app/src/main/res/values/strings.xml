@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">KioskKNX</string>
+    <string name="notif_channel">Servizio pannello</string>
+    <string name="notif_text">Videocitofono e API locali attivi</string>
+    <string name="disclaimer_title">Informativa e condizioni d\'uso</string>
+    <string name="disclaimer_text">Il creatore e sviluppatore di questa applicazione fornisce il software \"così com\'è\" (AS IS) e non si assume alcuna responsabilità per eventuali bug, malfunzionamenti, vulnerabilità di sicurezza, attacchi informatici/hacker o danni diretti e indiretti derivanti dall\'uso dell\'app sull\'impianto domotico o sulla rete. Inoltre, non viene fornita alcuna garanzia di funzionamento o compatibilità futura con il rilascio di nuove versioni o aggiornamenti del sistema operativo Android, e l\'utente accetta di non potersi rivalere a nessun titolo sullo sviluppatore.\n\nKioskKNX è software libero e gratuito distribuito con licenza GNU AGPL v3. Utilizza liblinphone (© Belledonne Communications, AGPL v3), GeckoView (© Mozilla, MPL 2.0) e altre librerie open source (vedi THIRD_PARTY_NOTICES.md nel repository).</string>
+    <string name="disclaimer_check">Ho letto e accetto integralmente le condizioni</string>
+    <string name="disclaimer_confirm">Conferma</string>
+</resources>

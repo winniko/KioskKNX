@@ -1,0 +1,6 @@
+# Mantiene il formato corretto degli script su ogni sistema
+*.bat text eol=crlf
+*.sh text eol=lf
+gradlew text eol=lf
+*.jar binary
+*.png binary
