@@ -207,20 +207,30 @@ class MainActivity : AppCompatActivity() {
         updateMotion(cfg)
     }
 
-    private var cameraPermissionAsked = false
+    private var permissionsAsked = false
+
+    /**
+     * Chiede (una volta per avvio) i permessi che servono alle funzioni attive: microfono per il
+     * citofono SIP (senza, l'audio della chiamata non parte) e fotocamera per il sensore di movimento.
+     * Se l'app è stata installata dal file manager, Android non li concede da solo.
+     */
+    private fun ensurePermissions(cfg: AppConfig) {
+        if (permissionsAsked || !initialized) return
+        val missing = mutableListOf<String>()
+        fun need(p: String) { if (checkSelfPermission(p) != android.content.pm.PackageManager.PERMISSION_GRANTED) missing += p }
+        if (cfg.sip.enabled) need(android.Manifest.permission.RECORD_AUDIO)
+        if (cfg.motion.enabled) need(android.Manifest.permission.CAMERA)
+        if (missing.isEmpty()) return
+        permissionsAsked = true
+        L.w("Main", "Permessi mancanti, li richiedo: ${missing.joinToString { it.substringAfterLast('.') }}")
+        requestPermissions(missing.toTypedArray(), REQ_PERMS)
+    }
 
     private fun updateMotion(cfg: AppConfig) {
         if (!initialized) return
+        ensurePermissions(cfg)
         if (cfg.motion.enabled && KioskBus.callState.value !is CallUiState.Idle) return
-        if (cfg.motion.enabled && checkSelfPermission(android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            // Senza permesso il sensore non funziona: lo chiedo una volta per avvio dell'app.
-            if (!cameraPermissionAsked) {
-                cameraPermissionAsked = true
-                L.w("Main", "Sensore di movimento attivo ma permesso Fotocamera mancante: lo richiedo")
-                requestPermissions(arrayOf(android.Manifest.permission.CAMERA), REQ_CAMERA)
-            }
-            return
-        }
+        if (cfg.motion.enabled && checkSelfPermission(android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
         if (cfg.motion.enabled) {
             val m = motion ?: MotionDetector(this) { onMotion() }.also { motion = it }
             m.update(cfg.motion)
@@ -233,7 +243,14 @@ class MainActivity : AppCompatActivity() {
     @Deprecated("Deprecated in Java")
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQ_CAMERA) updateMotion(ConfigRepository.current)
+        if (requestCode == REQ_PERMS) {
+            permissions.forEachIndexed { i, p ->
+                L.i("Main", "Permesso ${p.substringAfterLast('.')}: ${if (grantResults.getOrNull(i) == 0) "concesso" else "NEGATO"}")
+            }
+            updateMotion(ConfigRepository.current)
+            // Il servizio può ora dichiarare l'uso del microfono (chiamate a schermo spento).
+            KioskCoreService.start(this, KioskCoreService.ACTION_PROMOTE)
+        }
     }
 
     private fun showPendingPopup() {
@@ -479,6 +496,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         /** Il conto alla rovescia compare negli ultimi 5 secondi. */
         private const val COUNTDOWN_MS = 5_000L
-        private const val REQ_CAMERA = 41
+        private const val REQ_PERMS = 41
     }
 }

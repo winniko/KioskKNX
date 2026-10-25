@@ -51,6 +51,7 @@ import kotlin.system.exitProcess
 class SettingsActivity : KioskActivity() {
     private lateinit var content: LinearLayout
     private lateinit var collect: () -> AppConfig
+    private var nightChoice: () -> String = { ConfigRepository.nightOverride }
     private var buttonsDraft = mutableListOf<CustomButton>()
     private var buttonGetters = mutableListOf<() -> CustomButton>()
     private lateinit var buttonsBox: LinearLayout
@@ -85,8 +86,8 @@ class SettingsActivity : KioskActivity() {
             setBackgroundColor(Color.rgb(30, 38, 48))
         }
         bar.addView(label("Impostazioni KioskKNX", 22f, bold = true), LinearLayout.LayoutParams(0, WRAP, 1f))
-        bar.addView(pillButton("Annulla", Color.rgb(84, 110, 122)) { finish() })
-        bar.addView(pillButton("Salva", Color.rgb(46, 160, 67)) { save() }, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = dp(10) })
+        bar.addView(pillButton("Salva", Color.rgb(46, 160, 67)) { save() })
+        bar.addView(pillButton("Esci", Color.rgb(84, 110, 122)) { exitSettings() }, LinearLayout.LayoutParams(WRAP, WRAP).apply { marginStart = dp(10) })
         outer.addView(bar)
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -104,6 +105,7 @@ class SettingsActivity : KioskActivity() {
 
     private fun save() {
         val cfg = collect()
+        ConfigRepository.nightOverride = nightChoice()
         ConfigRepository.save(cfg)
         if (WebEngines.resolve(this, cfg.web) == "GECKO" && GeckoHolder.needsRestart(cfg.web)) {
             // Il motore Gecko legge zoom e dimensione testo solo all'avvio.
@@ -115,7 +117,16 @@ class SettingsActivity : KioskActivity() {
         }
         KioskBus.send(UiCommand.ApplyConfig)
         toast("Impostazioni salvate")
-        finish()
+    }
+
+    /** Esce dal menu; se ci sono modifiche non salvate chiede cosa fare. */
+    private fun exitSettings() {
+        val changed = runCatching { collect() != ConfigRepository.current || nightChoice() != ConfigRepository.nightOverride }.getOrDefault(false)
+        if (!changed) return finish()
+        AlertDialog.Builder(this).setMessage("Ci sono modifiche non salvate.")
+            .setPositiveButton("Salva ed esci") { _, _ -> save(); finish() }
+            .setNeutralButton("Esci senza salvare") { _, _ -> finish() }
+            .setNegativeButton("Annulla", null).show()
     }
 
     // ------------------------------------------------------------------ costruzione
@@ -135,10 +146,13 @@ class SettingsActivity : KioskActivity() {
         f.note(
             "Versione ${BuildConfig.VERSION_NAME}  -  IP $ip (${DeviceInfo.networkType(this)})\n" +
                 "Software libero (GNU AGPL v3) - codice sorgente: ${BuildConfig.SOURCE_URL}\n" +
+                "${it.kioskknx.app.util.NetRouter.summary()}\n" +
                 "API: http://$ip:${c.api.port}/\n" +
                 "Device Owner: ${if (KioskManager.isDeviceOwner(this)) "SÌ" else "no"}  -  Blocco kiosk: ${if (KioskBus.lockTaskActive.value) "attivo" else "non attivo"}\n" +
                 "SIP: ${KioskBus.sipRegistration.value}  -  Sintesi vocale: ${if (TtsManager.ready) (if (TtsManager.italianAvailable) "OK" else "manca la voce italiana") else "non disponibile"}\n" +
                 "Schermo: ${maxOf(dm.widthPixels, dm.heightPixels)}x${minOf(dm.widthPixels, dm.heightPixels)} pixel, ${dm.densityDpi} dpi -> la pagina web vede ${cssW}x${cssH} (con lo zoom attuale)\n" +
+                (if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    "⚠️ Permesso MICROFONO mancante: nelle chiamate non si sente l'audio (Sistema → Permessi)\n" else "") +
                 (if (checkSelfPermission(android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED)
                     "⚠️ Permesso FOTOCAMERA mancante: sensore di movimento e videochiamate non funzionano (Sistema → Permessi)\n" else "") +
                 "Motore web in uso: ${if (KioskBus.webEngine.value == "GECKO") "Gecko / Firefox (integrato nell'app)" else "WebView di sistema"}\n" +
@@ -219,12 +233,19 @@ class SettingsActivity : KioskActivity() {
         val aMic = f.float("Guadagno microfono (dB, es. -6 / 0 / 6)", c.audio.micGainDb)
         val aPlay = f.float("Guadagno altoparlante (dB)", c.audio.playbackGainDb)
         val aPtt = f.switch("Premi per parlare (half-duplex anti-eco)", c.audio.pushToTalk)
-        val aRingVol = f.int("Volume suoneria (%)", c.audio.ringVolumePercent)
+        val aRingVol = f.int("Volume suoneria (%, 0-100)", c.audio.ringVolumePercent.coerceIn(0, 100))
+        val aCallVol = f.int("Volume della conversazione (%, 0-100)", c.audio.callVolumePercent.coerceIn(0, 100))
+        val aRingGain = f.int("Amplificazione suoneria (dB, 0-20: oltre il volume massimo, es. 6 o 10)", c.audio.ringGainDb.coerceIn(0, 20))
         val aRing = f.choice("Suoneria", listOf("DEFAULT" to "Suoneria di sistema", "DOORBELL" to "Campanello din-don", "BEEP" to "Bip"), c.audio.ringtone)
         val aTtsVol = f.int("Volume sintesi vocale (%)", c.audio.ttsVolumePercent)
         val aTtsRate = f.float("Velocità voce (1.0 = normale)", c.audio.ttsSpeechRate)
         f.buttons(
-            "Prova suoneria" to { SoundManager.play(if (aRing() == "DOORBELL") "doorbell" else if (aRing() == "BEEP") "beep" else "ring", volumePercent = aRingVol()) },
+            "Prova suoneria" to {
+                // Stesso percorso della suoneria vera (canale allarme + amplificazione), con le impostazioni salvate.
+                toast("Suoneria di prova per 6 s (impostazioni salvate: premi Salva prima di provare)")
+                SoundManager.startRing()
+                window.decorView.postDelayed({ SoundManager.stopRing() }, 6000)
+            },
             "Stop" to { SoundManager.stopAll() },
             "Prova voce" to { TtsManager.speak("Prova di sintesi vocale del pannello KNX", aTtsVol(), aTtsRate(), force = true) },
             "Calibra eco" to { toast("Calibrazione: fai silenzio..."); SipManager.calibrateEcho { toast(it) } },
@@ -250,6 +271,21 @@ class SettingsActivity : KioskActivity() {
         }, color = Color.rgb(21, 101, 192))
 
         // ---- API
+        f.section("Rete (LAN / Wi-Fi)")
+        f.note("Modalità normale: l'app usa la rete scelta da Android (consigliata con una sola rete).\n" +
+            "Doppia rete: il tablet resta collegato sia al cavo (LAN) sia al Wi-Fi e qui scegli quale scheda usa ogni funzione. " +
+            "Esempio: citofono 2N sul Wi-Fi condominiale, pagina Home Assistant sulla LAN di casa.\n" +
+            "Gli indirizzi IP fissi delle schede si impostano nelle impostazioni di Android (pulsanti qui sotto).")
+        val nDual = f.switch("Doppia rete (LAN + Wi-Fi insieme)", c.network.dualMode)
+        val nets = listOf("WIFI" to "Wi-Fi", "ETHERNET" to "LAN (cavo)")
+        val nSip = f.choice("Rete del citofono (SIP 2N, video pre-risposta, apriporta)", nets, c.network.sipNetwork)
+        val nWeb = f.choice("Rete della pagina web (Home Assistant / KNX, pulsanti, webhook)", nets, c.network.webNetwork)
+        val nCam = f.choice("Rete del popup telecamera", listOf("WEB" to "Come la pagina web", "SIP" to "Come il citofono"), c.network.cameraNetwork)
+        f.buttons(
+            "Impostazioni Wi-Fi" to { openAndroidSettings(Settings.ACTION_WIFI_SETTINGS) },
+            "Impostazioni rete / LAN" to { openAndroidSettings(Settings.ACTION_WIRELESS_SETTINGS) },
+        )
+
         f.section("Server API locale")
         val apiEn = f.switch("API attive", c.api.enabled)
         val apiPort = f.int("Porta", c.api.port)
@@ -289,6 +325,7 @@ class SettingsActivity : KioskActivity() {
         val nMotion = f.switch("Il movimento accende lo schermo anche di notte", c.night.motionWake)
         val nTts = f.switch("Annunci vocali anche di notte", c.night.ttsEnabled)
         val nOverride = f.choice("Stato attuale", listOf("auto" to "Automatico (orario)", "on" to "Forza notte", "off" to "Forza giorno"), ConfigRepository.nightOverride)
+        nightChoice = nOverride
 
         // ---- Webhook
         f.section("Webhook in uscita (eventi verso la domotica)")
@@ -382,10 +419,11 @@ class SettingsActivity : KioskActivity() {
                 webhooks = WebhookConfig(whMethod(), whMotion(), whMotionInt(), whIn(), whAns(), whMiss(), whEnd(), whDoor()),
                 watchdog = WatchdogConfig(wdNight(), wdTime(), wdPer(), wdFreeze(), wdRetry()),
                 kiosk = KioskConfig(kLock(), kHold().coerceIn(2, 60), kCorner(), kPin(), kBoot()),
-                audio = AudioConfig(aEc(), aEl(), aMic(), aPlay(), aPtt(), aRingVol(), aRing(), aTtsVol(), aTtsRate()),
+                audio = AudioConfig(aEc(), aEl(), aMic(), aPlay(), aPtt(), aRingVol().coerceIn(0, 100), aRing(), aTtsVol().coerceIn(0, 100), aTtsRate(), aCallVol().coerceIn(0, 100), aRingGain().coerceIn(0, 20)),
                 // I numeri rapidi si modificano dal dialer: qui conservo quelli attuali.
+                network = it.kioskknx.app.config.NetworkConfig(nDual(), nSip(), nWeb(), nCam()),
                 dialer = ConfigRepository.current.dialer.copy(enabled = dEnabled(), edge = dEdge(), installerCode = dCode()),
-            ).also { ConfigRepository.nightOverride = nOverride() }
+            )
         }
     }
 

@@ -21,6 +21,7 @@ import it.kioskknx.app.sip.SipManager
 import it.kioskknx.app.update.AppUpdater
 import it.kioskknx.app.util.DeviceInfo
 import it.kioskknx.app.util.L
+import it.kioskknx.app.util.NetRouter
 import it.kioskknx.app.web.WebViewInfo
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -261,7 +262,13 @@ class ApiServer(private val ctx: Context, port: Int) : NanoHTTPD(port) {
                 put("brightness", KioskBus.brightness.value)
             }
             putJsonObject("battery") { put("level", bat.level); put("charging", bat.charging); put("power", bat.plugged) }
-            putJsonObject("network") { put("type", DeviceInfo.networkType(ctx)); put("ip", DeviceInfo.ipAddress()); put("apiPort", ConfigRepository.current.api.port) }
+            putJsonObject("network") {
+                put("type", DeviceInfo.networkType(ctx)); put("ip", DeviceInfo.ipAddress()); put("apiPort", ConfigRepository.current.api.port)
+                put("lanIp", NetRouter.ipOf(NetRouter.ethernet)); put("wifiIp", NetRouter.ipOf(NetRouter.wifi))
+                put("dualMode", ConfigRepository.current.network.dualMode)
+                put("sipVia", NetRouter.describe(NetRouter.networkFor(NetRouter.Use.SIP)))
+                put("webVia", NetRouter.describe(NetRouter.networkFor(NetRouter.Use.WEB)))
+            }
             putJsonObject("motion") {
                 put("enabled", ConfigRepository.current.motion.enabled)
                 put("lastMotion", if (lastMotion > 0) iso(lastMotion) else "")
@@ -272,6 +279,12 @@ class ApiServer(private val ctx: Context, port: Int) : NanoHTTPD(port) {
             put("night", NightMode.isActive())
             put("cameraPopup", KioskBus.cameraPopupOpen.value)
             put("tts", TtsManager.ready)
+            putJsonObject("permissions") {
+                fun g(p: String) = androidx.core.content.ContextCompat.checkSelfPermission(ctx, p) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                put("microphone", g(android.Manifest.permission.RECORD_AUDIO))
+                put("camera", g(android.Manifest.permission.CAMERA))
+                put("overlay", android.provider.Settings.canDrawOverlays(ctx))
+            }
             val wv = WebViewInfo.get(ctx)
             putJsonObject("webviewEngine") {
                 put("inUse", KioskBus.webEngine.value)

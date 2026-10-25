@@ -35,6 +35,7 @@ class RtspH264Client(
     private val url: String,
     private val surface: Surface,
     private val listener: Listener,
+    private val socketFactory: javax.net.SocketFactory = javax.net.SocketFactory.getDefault(),
 ) {
     interface Listener {
         fun onFirstFrame()
@@ -95,7 +96,7 @@ class RtspH264Client(
             val baseUrl = URI(uri.scheme, null, host, port, uri.path, uri.query, null).toString()
             requestBase = baseUrl
 
-            val s = Socket()
+            val s = socketFactory.createSocket()
             socket = s
             s.connect(InetSocketAddress(host, port), 5000)
             s.soTimeout = 10_000

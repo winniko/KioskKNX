@@ -19,8 +19,8 @@ android {
         applicationId = "it.kioskknx.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.3.0"
+        versionCode = 11
+        versionName = "1.4.2"
         ndk {
             // -Pabi=arm64-v8a produce un APK piu' leggero per un solo tipo di processore.
             val onlyAbi = project.findProperty("abi")?.toString()

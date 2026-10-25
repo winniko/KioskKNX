@@ -27,6 +27,7 @@ import it.kioskknx.app.kiosk.Watchdog
 import it.kioskknx.app.sip.SipManager
 import it.kioskknx.app.ui.MainActivity
 import it.kioskknx.app.util.L
+import it.kioskknx.app.util.NetRouter
 import it.kioskknx.app.util.NetworkMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +70,7 @@ class KioskCoreService : Service() {
     private var lastApiCfg: ApiConfig? = null
     private var lastSipCfg: SipConfig? = null
     private var lastAudio: Any? = null
+    private var lastNet: Any? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -78,6 +80,11 @@ class KioskCoreService : Service() {
         createChannel()
         goForeground()
         NetworkMonitor.start(this)
+        NetRouter.start(this)
+        NetRouter.addListener {
+            SipManager.onNetworkChanged(true)
+            it.kioskknx.app.web.GeckoHolder.applyProxy()
+        }
         NetworkMonitor.addListener { up ->
             SipManager.onNetworkChanged(up)
             if (up) {
@@ -87,6 +94,10 @@ class KioskCoreService : Service() {
         }
         scope.launch {
             ConfigRepository.config.collect { cfg ->
+                if (cfg.network != lastNet) {
+                    lastNet = cfg.network
+                    NetRouter.apply()
+                }
                 if (cfg.sip != lastSipCfg || cfg.audio != lastAudio) {
                     lastSipCfg = cfg.sip
                     lastAudio = cfg.audio

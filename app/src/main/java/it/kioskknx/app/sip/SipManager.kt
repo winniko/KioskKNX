@@ -506,6 +506,7 @@ object SipManager {
     }
 
     private fun routeToSpeaker(call: Call) {
+        SoundManager.setStreamPercent(android.media.AudioManager.STREAM_VOICE_CALL, ConfigRepository.current.audio.callVolumePercent)
         core?.audioDevices?.firstOrNull { it.type == AudioDevice.Type.Speaker }?.let {
             call.setOutputAudioDevice(it)
         }
@@ -565,7 +566,7 @@ object SipManager {
             call == null || (hasHttp && (lock.preferHttp || !answered)) -> {
                 if (!hasHttp) return onResult(false, "Nessuna chiamata attiva e nessun comando HTTP")
                 if (call != null && !answered && !lock.quickOpen) return onResult(false, "Rispondi prima di aprire")
-                HttpActions.fire(lock.http) { r -> done(r.ok, "HTTP ${r.code}") }
+                HttpActions.fire(lock.http, it.kioskknx.app.util.NetRouter.Use.SIP) { r -> done(r.ok, "HTTP ${r.code}") }
             }
             answered -> done(sendDtmf(lock.dtmf), "DTMF")
             lock.quickOpen -> {

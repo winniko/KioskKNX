@@ -220,6 +220,25 @@ Dal pannello puoi anche **chiamare**: altri pannelli, il citofono, interni del c
 
 Durante una chiamata il sensore di movimento si ferma (la fotocamera serve alla videochiamata) e riparte da solo alla fine.
 
+### 3.8 Doppia rete: LAN e Wi-Fi insieme
+Serve quando il citofono 2N e la pagina domotica stanno su **due reti diverse**. Esempio: il 2N sulla rete condominiale `192.168.10.x` raggiunta via Wi-Fi, Home Assistant sulla rete di casa `192.168.1.x` raggiunta via cavo. Se tutto è sulla stessa rete lascia la **modalità normale**.
+
+1. **IP fissi** (una volta sola, dalle impostazioni di Android: Android non permette alle app di impostarli). Nel menu di KioskKNX, sezione *Rete (LAN / Wi-Fi)*, ci sono i pulsanti per aprirle.
+   - **LAN:** *Impostazioni → Rete → Ethernet → IP statico* (es. `192.168.1.50`, gateway `192.168.1.1`).
+   - **Wi-Fi:** tieni premuto sulla rete → *Modifica* → *Opzioni avanzate* → *Impostazioni IP: Statico* (es. `192.168.10.101`). Il **gateway** lascialo vuoto o metti quello della rete condominiale.
+   - In alternativa chiedi a chi gestisce le reti di **riservare** quegli indirizzi nel DHCP.
+2. Collega il tablet sia al cavo sia al Wi-Fi.
+3. Menu KioskKNX → *Rete (LAN / Wi-Fi)*:
+   - **Doppia rete:** attiva;
+   - **Rete del citofono:** Wi-Fi oppure LAN (dove sta il 2N);
+   - **Rete della pagina web:** LAN oppure Wi-Fi (dove sta Home Assistant / il server KNX);
+   - **Rete del popup telecamera:** come la pagina web oppure come il citofono (dove stanno le telecamere / l'NVR).
+4. **Salva.** In *Stato del pannello* vedi gli IP delle due schede e quale funzione usa ciascuna.
+5. Sul 2N il pulsante dell'appartamento deve chiamare l'IP del tablet **sulla rete del citofono** (es. `sip:pannello@192.168.10.101:5062`).
+
+Puoi cambiare la scelta in qualsiasi momento, anche da remoto con `/api/config` (sezione `network`). Con la doppia rete la pagina web usa sempre il motore Gecko integrato.
+Se una delle due schede non è collegata, le funzioni assegnate a quella scheda usano la rete disponibile.
+
 ## 4. Manuale delle API locali
 
 ### 4.1 Nozioni di base

@@ -22,6 +22,22 @@ data class AppConfig(
     val kiosk: KioskConfig = KioskConfig(),
     val audio: AudioConfig = AudioConfig(),
     val dialer: DialerConfig = DialerConfig(),
+    val network: NetworkConfig = NetworkConfig(),
+)
+
+/**
+ * Doppia rete (LAN + Wi-Fi contemporaneamente). Con [dualMode] = false l'app usa la rete scelta da
+ * Android, come sempre. Valori delle schede: "WIFI" | "ETHERNET".
+ */
+@Serializable
+data class NetworkConfig(
+    val dualMode: Boolean = false,
+    /** Citofono: SIP (linphone), video pre-risposta, apriporta HTTP. */
+    val sipNetwork: String = "WIFI",
+    /** Pagina web (Home Assistant / KNX), pulsanti personalizzati, webhook, aggiornamenti. */
+    val webNetwork: String = "ETHERNET",
+    /** Popup telecamera da API: "SIP" = come il citofono, "WEB" = come la pagina web. */
+    val cameraNetwork: String = "WEB",
 )
 
 @Serializable
@@ -224,4 +240,8 @@ data class AudioConfig(
     val ringtone: String = "DEFAULT", // DEFAULT | DOORBELL | BEEP
     val ttsVolumePercent: Int = 90,
     val ttsSpeechRate: Float = 1.0f,
+    /** Volume dell'audio in conversazione (canale chiamata di Android). */
+    val callVolumePercent: Int = 100,
+    /** Amplificazione software di suoneria e suoni API oltre il 100% (dB, 0-20). */
+    val ringGainDb: Int = 0,
 )

@@ -53,6 +53,9 @@ class StreamViewer(private val context: Context, private val container: FrameLay
     private var firstFrameNotified = false
     private var startedAt = 0L
 
+    /** Scheda di rete da usare per i flussi (doppia rete). */
+    var netUse = it.kioskknx.app.util.NetRouter.Use.CAMERA
+
     var onFirstFrame: (() -> Unit)? = null
     /** Errore temporaneo (seguirà un nuovo tentativo). */
     var onError: ((String) -> Unit)? = null
@@ -149,6 +152,7 @@ class StreamViewer(private val context: Context, private val container: FrameLay
             }
         })
         val source = RtspMediaSource.Factory()
+            .setSocketFactory(it.kioskknx.app.util.NetRouter.socketFactory(netUse))
             .setForceUseRtpTcp(useTcpNow)
             .setTimeoutMs(5000)
             .createMediaSource(MediaItem.fromUri(url))
@@ -165,7 +169,7 @@ class StreamViewer(private val context: Context, private val container: FrameLay
                 val surface = Surface(st)
                 nativeSurface = surface
                 lateinit var client: RtspH264Client
-                client = RtspH264Client(url, surface, object : RtspH264Client.Listener {
+                client = RtspH264Client(url, surface, socketFactory = it.kioskknx.app.util.NetRouter.socketFactory(netUse), listener = object : RtspH264Client.Listener {
                     override fun onFirstFrame() { if (native === client) frameReady() }
                     override fun onVideoSize(width: Int, height: Int) { if (native === client) fit(tv, width, height) }
                     override fun onError(e: Throwable) { if (native === client) handleError(e, "lettore H.264 integrato") }
@@ -260,7 +264,7 @@ class StreamViewer(private val context: Context, private val container: FrameLay
 
     private fun mjpegLoop(target: String, iv: ImageView) {
         val (u, user, pass) = HttpActions.splitUserInfo(target, "", "")
-        val client = HttpActions.clientFor(user, pass, streaming = true)
+        val client = HttpActions.clientFor(user, pass, streaming = true, use = netUse)
         while (running && !Thread.currentThread().isInterrupted) {
             try {
                 client.newCall(Request.Builder().url(u).build()).execute().use { r ->

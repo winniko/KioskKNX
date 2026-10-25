@@ -23,6 +23,8 @@ object SoundManager {
     private lateinit var app: Context
     private var ringPlayer: MediaPlayer? = null
     private var soundPlayer: MediaPlayer? = null
+    /** Amplificatori collegati ai player (si rilasciano insieme al player). */
+    private val boosters = HashMap<MediaPlayer, android.media.audiofx.LoudnessEnhancer>()
     private val audio by lazy { app.getSystemService(AudioManager::class.java) }
 
     val names = listOf("doorbell", "ring", "notification", "alarm", "beep", "chime")
@@ -46,11 +48,12 @@ object SoundManager {
             else -> RingtoneManager.getActualDefaultRingtoneUri(app, RingtoneManager.TYPE_RINGTONE)
                 ?: Uri.fromFile(soundFile("doorbell"))
         }
-        ringPlayer = createPlayer(uri, loop = true, volumePercent = vol)
+        // Canale "allarme": Android non lo abbassa mentre è aperto l'audio della chiamata (early media).
+        ringPlayer = createPlayer(uri, loop = true, volumePercent = vol, alarm = true)
     }
 
     fun stopRing() {
-        ringPlayer?.let { runCatching { it.stop(); it.release() } }
+        ringPlayer?.let { releasePlayer(it) }
         ringPlayer = null
     }
 
@@ -72,7 +75,7 @@ object SoundManager {
     }
 
     fun stopSound() {
-        soundPlayer?.let { runCatching { it.stop(); it.release() } }
+        soundPlayer?.let { releasePlayer(it) }
         soundPlayer = null
     }
 
@@ -83,28 +86,31 @@ object SoundManager {
 
     val isPlaying: Boolean get() = (ringPlayer != null) || (soundPlayer?.isPlaying == true)
 
-    fun setMediaVolume(percent: Int) {
+    fun setMediaVolume(percent: Int) = setStreamPercent(AudioManager.STREAM_MUSIC, percent)
+
+    /** Imposta il volume di un canale audio di Android in percentuale (0-100). */
+    fun setStreamPercent(stream: Int, percent: Int) {
         try {
-            val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            audio.setStreamVolume(AudioManager.STREAM_MUSIC, (max * percent.coerceIn(0, 100) / 100f).roundToInt(), 0)
+            val max = audio.getStreamMaxVolume(stream)
+            audio.setStreamVolume(stream, (max * percent.coerceIn(0, 100) / 100f).roundToInt(), 0)
         } catch (e: Exception) {
-            L.w(TAG, "Volume non impostabile", e)
+            L.w(TAG, "Volume non impostabile (canale $stream)", e)
         }
     }
 
-    private fun createPlayer(uri: Uri, loop: Boolean, volumePercent: Int): MediaPlayer? = try {
-        setMediaVolume(volumePercent)
+    private fun createPlayer(uri: Uri, loop: Boolean, volumePercent: Int, alarm: Boolean = false): MediaPlayer? = try {
+        setStreamPercent(if (alarm) AudioManager.STREAM_ALARM else AudioManager.STREAM_MUSIC, volumePercent)
         MediaPlayer().apply {
             setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setUsage(if (alarm) AudioAttributes.USAGE_ALARM else AudioAttributes.USAGE_MEDIA)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build()
             )
             setDataSource(app, uri)
             isLooping = loop
-            setOnCompletionListener { if (!loop) runCatching { it.release() }; if (soundPlayer == it) soundPlayer = null }
-            setOnPreparedListener { it.start() }
+            setOnCompletionListener { if (!loop) releasePlayer(it); if (soundPlayer == it) soundPlayer = null }
+            setOnPreparedListener { boost(it); it.start() }
             prepareAsync()
         }
     } catch (e: Exception) {
@@ -114,7 +120,29 @@ object SoundManager {
 
     // ------------------------------------------------------------------ generazione suoni WAV (offline)
 
-    private fun soundFile(name: String) = File(app.filesDir, "sounds/$name.wav")
+    private fun releasePlayer(p: MediaPlayer) {
+        synchronized(boosters) { boosters.remove(p) }?.let { runCatching { it.release() } }
+        runCatching { p.stop() }
+        runCatching { p.release() }
+    }
+
+    /** Amplifica il player oltre il volume massimo di Android (LoudnessEnhancer). */
+    private fun boost(p: MediaPlayer) {
+        val db = ConfigRepository.current.audio.ringGainDb.coerceIn(0, 20)
+        if (db == 0) return
+        try {
+            val le = android.media.audiofx.LoudnessEnhancer(p.audioSessionId)
+            le.setTargetGain(db * 100)
+            le.enabled = true
+            synchronized(boosters) { boosters[p] = le }
+            L.i(TAG, "Amplificazione suono +$db dB")
+        } catch (e: Exception) {
+            L.w(TAG, "Amplificazione non disponibile su questo dispositivo", e)
+        }
+    }
+
+    // v2: suoni portati al livello massimo (prima ~60%)
+    private fun soundFile(name: String) = File(app.filesDir, "sounds/${name}_v2.wav")
 
     private fun generateSounds() {
         val dir = File(app.filesDir, "sounds").apply { mkdirs() }
@@ -131,7 +159,10 @@ object SoundManager {
                 }
                 repeat((rate * gap).toInt()) { out += 0 }
             }
-            return out.toShortArray()
+            // normalizzo al 95% del massimo: suono più forte senza distorsione
+            val peak = out.maxOfOrNull { kotlin.math.abs(it.toInt()) }?.coerceAtLeast(1) ?: 1
+            val k = Short.MAX_VALUE * 0.95 / peak
+            return ShortArray(out.size) { (out[it] * k).toInt().toShort() }
         }
         val sounds = mapOf(
             "doorbell" to tone(listOf(659.0 to 0.9, 523.0 to 1.4), decay = 2.5),
@@ -140,7 +171,7 @@ object SoundManager {
             "alarm" to tone((1..6).flatMap { listOf(880.0 to 0.25, 660.0 to 0.25) }, decay = 0.0),
         )
         for ((name, pcm) in sounds) {
-            val f = File(dir, "$name.wav")
+            val f = File(dir, "${name}_v2.wav")
             if (f.exists() && f.length() > 44) continue
             writeWav(f, pcm, rate)
         }

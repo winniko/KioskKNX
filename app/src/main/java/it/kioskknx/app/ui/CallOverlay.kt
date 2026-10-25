@@ -99,6 +99,7 @@ class CallOverlay(private val activity: AppCompatActivity, root: FrameLayout, pr
         activity.lifecycleScope.launch {
             KioskBus.sipVideoReceived.collect { received -> if (received) onSipVideo() }
         }
+        fallback.netUse = it.kioskknx.app.util.NetRouter.Use.SIP
         fallback.onFirstFrame = {
             videoMsg.show(false)
             main.postDelayed({ fallback.snapshot()?.let { CallHistory.saveBitmap(it) } }, 800)

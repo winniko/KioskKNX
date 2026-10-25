@@ -46,7 +46,38 @@ object GeckoHolder {
         createdZoom = web.pageZoom
         createdTextZoom = web.textZoom
         L.i("Gecko", "Avvio motore Gecko (zoom ${web.pageZoom}%)")
-        return GeckoRuntime.create(context.applicationContext, settings).also { runtime = it }
+        return GeckoRuntime.create(context.applicationContext, settings).also {
+            runtime = it
+            applyProxy()
+        }
+    }
+
+    private var appliedProxyPort = -1
+
+    /** Doppia rete: fa passare la pagina web dal proxy interno che esce dalla scheda scelta. */
+    fun applyProxy() {
+        if (runtime == null) return
+        val port = it.kioskknx.app.util.NetRouter.webProxyPort
+        if (port == appliedProxyPort) return
+        val reload = appliedProxyPort != -1
+        appliedProxyPort = port
+        val user = org.mozilla.geckoview.GeckoPreferenceController.PREF_BRANCH_USER
+        try {
+            if (port > 0) {
+                org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref("network.proxy.socks", "127.0.0.1", user)
+                org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref("network.proxy.socks_port", port, user)
+                org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref("network.proxy.socks_version", 5, user)
+                org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref("network.proxy.socks_remote_dns", true, user)
+                org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref("network.proxy.type", 1, user)
+                L.i("Gecko", "Pagina web tramite proxy interno (porta $port)")
+            } else {
+                org.mozilla.geckoview.GeckoPreferenceController.setGeckoPref("network.proxy.type", 0, user)
+                L.i("Gecko", "Pagina web senza proxy (rete predefinita)")
+            }
+        } catch (e: Throwable) {
+            L.e("Gecko", "Impostazione proxy non riuscita", e)
+        }
+        if (reload) it.kioskknx.app.KioskBus.send(it.kioskknx.app.UiCommand.Reload)
     }
 
     /** True se zoom/testo sono cambiati rispetto al runtime già creato (serve riavvio app). */

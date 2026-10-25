@@ -14,6 +14,7 @@ App Android **open source e gratuita** per pannelli a muro e tablet usati con la
 - **Popup telecamera RTSP/MJPEG** comandabile dalla domotica, compatibile con gli NVR Hikvision (lettore H.264 integrato per i flussi senza `sprop-parameter-sets`).
 - **API REST locale:** schermo, pagina web, sintesi vocale in italiano, suoni, popup telecamera, chiamate, stato, configurazione, aggiornamento remoto.
 - **Kiosk blindato** con Device Owner e Lock Task (facoltativo), avvio al boot, riavvio automatico dopo un crash.
+- **Doppia rete LAN + Wi-Fi:** citofono SIP su una scheda e pagina web sull'altra (es. 2N sulla rete condominiale, Home Assistant sulla rete di casa), senza root.
 - **Sensore di movimento** con la fotocamera frontale, salvaschermo anti burn-in, modalità notte, webhook in uscita.
 
 Pensato per pannelli Hikvision DS-KH9570-WTE1/S e tablet Rockchip RK3566. Android 7.0 o superiore, ARM 32/64 bit.

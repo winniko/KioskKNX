@@ -54,8 +54,10 @@ object HttpActions {
     }
 
     /** Client con autenticazione Basic/Digest automatica (Hikvision ISAPI usa Digest). */
-    fun clientFor(user: String, password: String, streaming: Boolean = false): OkHttpClient {
+    fun clientFor(user: String, password: String, streaming: Boolean = false, use: NetRouter.Use = NetRouter.Use.WEB): OkHttpClient {
         val b = baseClient.newBuilder()
+            .socketFactory(NetRouter.socketFactory(use))
+            .dns(NetRouter.dns(use))
         if (streaming) b.readTimeout(0, TimeUnit.SECONDS)
         if (user.isNotEmpty()) {
             val creds = Credentials(user, password)
@@ -72,7 +74,7 @@ object HttpActions {
 
     data class Result(val ok: Boolean, val code: Int, val body: String)
 
-    suspend fun execute(req: HttpRequestConfig): Result = withContext(Dispatchers.IO) {
+    suspend fun execute(req: HttpRequestConfig, use: NetRouter.Use = NetRouter.Use.WEB): Result = withContext(Dispatchers.IO) {
         if (req.url.isBlank()) return@withContext Result(false, 0, "URL vuoto")
         try {
             val (url, user, pass) = splitUserInfo(req.url, req.user, req.password)
@@ -83,7 +85,7 @@ object HttpActions {
             req.headers.lines().map { it.trim() }.filter { it.contains(":") }.forEach {
                 builder.addHeader(it.substringBefore(":").trim(), it.substringAfter(":").trim())
             }
-            clientFor(user, pass).newCall(builder.build()).execute().use { r ->
+            clientFor(user, pass, use = use).newCall(builder.build()).execute().use { r ->
                 val text = r.body?.string()?.take(2000) ?: ""
                 L.i(TAG, "$method $url -> ${r.code}")
                 Result(r.isSuccessful, r.code, text)
@@ -94,9 +96,9 @@ object HttpActions {
         }
     }
 
-    fun fire(req: HttpRequestConfig, onDone: ((Result) -> Unit)? = null) {
+    fun fire(req: HttpRequestConfig, use: NetRouter.Use = NetRouter.Use.WEB, onDone: ((Result) -> Unit)? = null) {
         scope.launch {
-            val r = execute(req)
+            val r = execute(req, use)
             if (onDone != null) withContext(Dispatchers.Main) { onDone(r) }
         }
     }

@@ -30,7 +30,12 @@ interface WebEngineListener {
 
 object WebEngines {
     /** Motore effettivo per la configurazione: in AUTO usa Gecko se la WebView di sistema è vecchia. */
-    fun resolve(context: Context, web: WebConfig): String = when (web.engine) {
+    fun resolve(context: Context, web: WebConfig): String = when {
+        it.kioskknx.app.config.ConfigRepository.current.network.let { n -> n.dualMode && n.webNetwork != n.sipNetwork } -> "GECKO"
+        else -> resolveEngine(context, web)
+    }
+
+    private fun resolveEngine(context: Context, web: WebConfig): String = when (web.engine) {
         "GECKO" -> "GECKO"
         "SYSTEM" -> "SYSTEM"
         else -> if (WebViewInfo.get(context).major < WebViewInfo.MIN_RECOMMENDED) "GECKO" else "SYSTEM"
