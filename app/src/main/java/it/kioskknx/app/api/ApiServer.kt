@@ -135,12 +135,19 @@ class ApiServer(private val ctx: Context, port: Int) : NanoHTTPD(port) {
             onMain { SoundManager.stopAll(); TtsManager.stop() }
             return json(ok("suoni fermati"))
         }
-        val name = (r.params["name"] ?: r.params["sound"] ?: "notification").lowercase(Locale.ROOT)
+        val name = (r.params["name"] ?: r.params["sound"] ?: ConfigRepository.current.audio.apiDefaultSound).lowercase(Locale.ROOT)
         val url = r.params["url"].orEmpty()
         val loop = r.params["loop"].isTrue()
         val vol = r.params["volume"]?.toIntOrNull() ?: -1
+        // force=true: suona anche di notte con suoneria silenziata (es. allarmi)
+        val force = r.params["force"].isTrue()
+        val night = NightMode.isActive()
+        if (night && ConfigRepository.current.night.apiSilent && !force) {
+            L.i("Api", "Suono $name non riprodotto: modalità notte con suoneria silenziata")
+            return json(ok("modalità notte: suono silenziato (usa force=true per suonare comunque)"))
+        }
         var played = false
-        onMain { played = SoundManager.play(name, url, loop, vol) }
+        onMain { played = SoundManager.play(name, url, loop, vol, nightVolume = night && !force) }
         return if (played) json(ok("riproduco $name"))
         else json(Response.Status.BAD_REQUEST, err("suono sconosciuto. Disponibili: ${SoundManager.names.joinToString()} oppure url="))
     }

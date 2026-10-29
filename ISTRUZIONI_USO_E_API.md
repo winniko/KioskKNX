@@ -315,6 +315,11 @@ curl -X POST -H "X-Api-Key: segreta" -H "Content-Type: application/json" \
 | `loop` | `true` / `false` | ripete finché non viene fermato |
 | `volume` | `0`–`100` | volume |
 | `action` | `play` (predefinito), `stop` | `stop` ferma suoni, suoneria e voce |
+| `force` | `true` / `false` | `true` = suona anche in modalità notte con suoneria silenziata (es. allarmi) |
+
+**Impostazioni separate dal citofono** (menu → Audio e suoneria → "Suoni comandati dalla domotica"): volume, amplificazione (dB) e suono predefinito usato quando la richiesta non indica `name`. La suoneria del citofono SIP ha le sue impostazioni distinte.
+
+**Modalità notte** (menu → Modalità notte): "Domotica: suoni silenziati di notte" → i suoni NON vengono riprodotti (risposta `ok` con messaggio "suono silenziato"); altrimenti usano al massimo "Domotica: volume suoni di notte", senza amplificazione. La suoneria del citofono SIP ha interruttore e volume notturni separati. Per un allarme che deve suonare sempre aggiungi `force=true`.
 
 ```
 GET http://192.168.1.60:8080/api/sound?key=segreta&name=alarm&loop=true&volume=100

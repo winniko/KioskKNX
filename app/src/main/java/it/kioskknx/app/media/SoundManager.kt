@@ -49,7 +49,8 @@ object SoundManager {
                 ?: Uri.fromFile(soundFile("doorbell"))
         }
         // Canale "allarme": Android non lo abbassa mentre è aperto l'audio della chiamata (early media).
-        ringPlayer = createPlayer(uri, loop = true, volumePercent = vol, alarm = true)
+        ringPlayer = createPlayer(uri, loop = true, volumePercent = vol, alarm = true,
+            gainDb = if (night) 0 else ConfigRepository.current.audio.ringGainDb)
     }
 
     fun stopRing() {
@@ -60,7 +61,8 @@ object SoundManager {
     // ------------------------------------------------------------------ suoni API
 
     /** Riproduce un suono predefinito ([names]) o un URL audio. */
-    fun play(name: String, url: String = "", loop: Boolean = false, volumePercent: Int = -1): Boolean {
+    /** Suono comandato dalla domotica: volume/amplificazione "domotica" (di notte volume notturno, senza amplificazione). */
+    fun play(name: String, url: String = "", loop: Boolean = false, volumePercent: Int = -1, nightVolume: Boolean = false): Boolean {
         stopSound()
         val uri: Uri = when {
             url.isNotBlank() -> Uri.parse(url)
@@ -69,8 +71,11 @@ object SoundManager {
             name in names -> Uri.fromFile(soundFile(name))
             else -> return false
         }
-        val vol = if (volumePercent in 0..100) volumePercent else ConfigRepository.current.audio.ringVolumePercent
-        soundPlayer = createPlayer(uri, loop, vol)
+        val a = ConfigRepository.current.audio
+        var vol = if (volumePercent in 0..100) volumePercent else a.apiVolumePercent
+        // Di notte i suoni della domotica non superano il loro volume notturno
+        if (nightVolume) vol = minOf(vol, ConfigRepository.current.night.apiVolumePercent)
+        soundPlayer = createPlayer(uri, loop, vol, gainDb = if (nightVolume) 0 else a.apiGainDb)
         return soundPlayer != null
     }
 
@@ -98,7 +103,7 @@ object SoundManager {
         }
     }
 
-    private fun createPlayer(uri: Uri, loop: Boolean, volumePercent: Int, alarm: Boolean = false): MediaPlayer? = try {
+    private fun createPlayer(uri: Uri, loop: Boolean, volumePercent: Int, alarm: Boolean = false, gainDb: Int = 0): MediaPlayer? = try {
         setStreamPercent(if (alarm) AudioManager.STREAM_ALARM else AudioManager.STREAM_MUSIC, volumePercent)
         MediaPlayer().apply {
             setAudioAttributes(
@@ -110,7 +115,7 @@ object SoundManager {
             setDataSource(app, uri)
             isLooping = loop
             setOnCompletionListener { if (!loop) releasePlayer(it); if (soundPlayer == it) soundPlayer = null }
-            setOnPreparedListener { boost(it); it.start() }
+            setOnPreparedListener { boost(it, gainDb); it.start() }
             prepareAsync()
         }
     } catch (e: Exception) {
@@ -127,8 +132,8 @@ object SoundManager {
     }
 
     /** Amplifica il player oltre il volume massimo di Android (LoudnessEnhancer). */
-    private fun boost(p: MediaPlayer) {
-        val db = ConfigRepository.current.audio.ringGainDb.coerceIn(0, 20)
+    private fun boost(p: MediaPlayer, gainDb: Int) {
+        val db = gainDb.coerceIn(0, 20)
         if (db == 0) return
         try {
             val le = android.media.audiofx.LoudnessEnhancer(p.audioSessionId)

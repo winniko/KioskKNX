@@ -233,10 +233,18 @@ class SettingsActivity : KioskActivity() {
         val aMic = f.float("Guadagno microfono (dB, es. -6 / 0 / 6)", c.audio.micGainDb)
         val aPlay = f.float("Guadagno altoparlante (dB)", c.audio.playbackGainDb)
         val aPtt = f.switch("Premi per parlare (half-duplex anti-eco)", c.audio.pushToTalk)
-        val aRingVol = f.int("Volume suoneria (%, 0-100)", c.audio.ringVolumePercent.coerceIn(0, 100))
+        f.note("Suoneria del citofono / telefono SIP:")
+        val aRingVol = f.int("Volume suoneria citofono SIP (%, 0-100)", c.audio.ringVolumePercent.coerceIn(0, 100))
         val aCallVol = f.int("Volume della conversazione (%, 0-100)", c.audio.callVolumePercent.coerceIn(0, 100))
-        val aRingGain = f.int("Amplificazione suoneria (dB, 0-20: oltre il volume massimo, es. 6 o 10)", c.audio.ringGainDb.coerceIn(0, 20))
-        val aRing = f.choice("Suoneria", listOf("DEFAULT" to "Suoneria di sistema", "DOORBELL" to "Campanello din-don", "BEEP" to "Bip"), c.audio.ringtone)
+        val aRingGain = f.int("Amplificazione suoneria citofono SIP (dB, 0-20: oltre il volume massimo, es. 6 o 10)", c.audio.ringGainDb.coerceIn(0, 20))
+        val aRing = f.choice("Suoneria citofono SIP", listOf("DEFAULT" to "Suoneria di sistema", "DOORBELL" to "Campanello din-don", "BEEP" to "Bip"), c.audio.ringtone)
+        f.note("Suoni comandati dalla domotica / pagina web (/api/sound):")
+        val aApiVol = f.int("Volume suoni domotica (%, 0-100)", c.audio.apiVolumePercent.coerceIn(0, 100))
+        val aApiGain = f.int("Amplificazione suoni domotica (dB, 0-20)", c.audio.apiGainDb.coerceIn(0, 20))
+        val soundLabels = mapOf("doorbell" to "Campanello din-don", "ring" to "Suoneria di sistema", "notification" to "Notifica di sistema",
+            "alarm" to "Allarme", "beep" to "Bip", "chime" to "Carillon")
+        val aApiSound = f.choice("Suono predefinito della domotica (se non ne indica uno)",
+            SoundManager.names.map { it to (soundLabels[it] ?: it) }, c.audio.apiDefaultSound)
         val aTtsVol = f.int("Volume sintesi vocale (%)", c.audio.ttsVolumePercent)
         val aTtsRate = f.float("Velocità voce (1.0 = normale)", c.audio.ttsSpeechRate)
         f.buttons(
@@ -245,6 +253,10 @@ class SettingsActivity : KioskActivity() {
                 toast("Suoneria di prova per 6 s (impostazioni salvate: premi Salva prima di provare)")
                 SoundManager.startRing()
                 window.decorView.postDelayed({ SoundManager.stopRing() }, 6000)
+            },
+            "Prova suono domotica" to {
+                toast("Suono domotica di prova (impostazioni salvate: premi Salva prima di provare)")
+                SoundManager.play(ConfigRepository.current.audio.apiDefaultSound)
             },
             "Stop" to { SoundManager.stopAll() },
             "Prova voce" to { TtsManager.speak("Prova di sintesi vocale del pannello KNX", aTtsVol(), aTtsRate(), force = true) },
@@ -319,12 +331,16 @@ class SettingsActivity : KioskActivity() {
         val nEn = f.switch("Attiva a orario", c.night.enabled)
         val nStart = f.text("Inizio (HH:mm)", c.night.start)
         val nEnd = f.text("Fine (HH:mm)", c.night.end)
-        val nVol = f.int("Volume suoneria di notte (%)", c.night.ringVolumePercent)
-        val nSilent = f.switch("Suoneria silenziata di notte", c.night.silentRing)
+        val nSilent = f.switch("Citofono SIP: suoneria silenziata di notte", c.night.silentRing)
+        val nVol = f.int("Citofono SIP: volume suoneria di notte (%)", c.night.ringVolumePercent)
+        val nApiSilent = f.switch("Domotica: suoni silenziati di notte", c.night.apiSilent)
+        val nApiVol = f.int("Domotica: volume suoni di notte (%)", c.night.apiVolumePercent)
         val nBright = f.int("Luminosità massima di notte (%)", c.night.maxBrightness)
         val nMotion = f.switch("Il movimento accende lo schermo anche di notte", c.night.motionWake)
         val nTts = f.switch("Annunci vocali anche di notte", c.night.ttsEnabled)
-        val nOverride = f.choice("Stato attuale", listOf("auto" to "Automatico (orario)", "on" to "Forza notte", "off" to "Forza giorno"), ConfigRepository.nightOverride)
+        val nOverride = f.choice("Stato attuale", listOf("auto" to "Automatico (orario)", "on" to "Forza notte (sempre)", "off" to "Forza giorno (sempre)"), ConfigRepository.nightOverride)
+        f.note("\"Forza notte\" e \"Forza giorno\" restano attivi finché non torni su \"Automatico\": con \"Forza giorno\" " +
+            "la notte a orario non parte mai. I suoni della domotica inviati con force=true suonano sempre (allarmi).")
         nightChoice = nOverride
 
         // ---- Webhook
@@ -415,11 +431,12 @@ class SettingsActivity : KioskActivity() {
                 api = ApiConfig(apiEn(), apiPort(), apiKey(), apiCfgW(), apiUpd()),
                 display = DisplayConfig(dEn(), dTo(), dMode(), dClock(), dDim(), dBright(), dOn()),
                 motion = MotionConfig(mEn(), mSens().coerceIn(1, 100), mWake(), mFps().coerceIn(1, 15), mCool()),
-                night = NightConfig(nEn(), nStart(), nEnd(), nVol(), nSilent(), nBright(), nMotion(), nTts()),
+                night = NightConfig(nEn(), nStart(), nEnd(), nVol().coerceIn(0, 100), nSilent(), nApiVol().coerceIn(0, 100), nApiSilent(), nBright(), nMotion(), nTts()),
                 webhooks = WebhookConfig(whMethod(), whMotion(), whMotionInt(), whIn(), whAns(), whMiss(), whEnd(), whDoor()),
                 watchdog = WatchdogConfig(wdNight(), wdTime(), wdPer(), wdFreeze(), wdRetry()),
                 kiosk = KioskConfig(kLock(), kHold().coerceIn(2, 60), kCorner(), kPin(), kBoot()),
-                audio = AudioConfig(aEc(), aEl(), aMic(), aPlay(), aPtt(), aRingVol().coerceIn(0, 100), aRing(), aTtsVol().coerceIn(0, 100), aTtsRate(), aCallVol().coerceIn(0, 100), aRingGain().coerceIn(0, 20)),
+                audio = AudioConfig(aEc(), aEl(), aMic(), aPlay(), aPtt(), aRingVol().coerceIn(0, 100), aRing(), aTtsVol().coerceIn(0, 100), aTtsRate(), aCallVol().coerceIn(0, 100), aRingGain().coerceIn(0, 20),
+                    aApiVol().coerceIn(0, 100), aApiGain().coerceIn(0, 20), aApiSound()),
                 // I numeri rapidi si modificano dal dialer: qui conservo quelli attuali.
                 network = it.kioskknx.app.config.NetworkConfig(nDual(), nSip(), nWeb(), nCam()),
                 dialer = ConfigRepository.current.dialer.copy(enabled = dEnabled(), edge = dEdge(), installerCode = dCode()),

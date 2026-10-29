@@ -190,8 +190,12 @@ data class NightConfig(
     val enabled: Boolean = false,
     val start: String = "22:30",
     val end: String = "07:00",
+    /** Suoneria del citofono/telefono SIP di notte. */
     val ringVolumePercent: Int = 30,
     val silentRing: Boolean = false,
+    /** Suoni della domotica (/api/sound) di notte. */
+    val apiVolumePercent: Int = 30,
+    val apiSilent: Boolean = true,
     val maxBrightness: Int = 30,
     val motionWake: Boolean = false,
     val ttsEnabled: Boolean = false,
@@ -242,6 +246,10 @@ data class AudioConfig(
     val ttsSpeechRate: Float = 1.0f,
     /** Volume dell'audio in conversazione (canale chiamata di Android). */
     val callVolumePercent: Int = 100,
-    /** Amplificazione software di suoneria e suoni API oltre il 100% (dB, 0-20). */
+    /** Amplificazione software della suoneria del citofono/telefono SIP oltre il 100% (dB, 0-20). */
     val ringGainDb: Int = 0,
+    /** Suoni comandati dalla domotica (/api/sound, pagina web): volume, amplificazione e suono predefinito separati. */
+    val apiVolumePercent: Int = 80,
+    val apiGainDb: Int = 0,
+    val apiDefaultSound: String = "notification",
 )
